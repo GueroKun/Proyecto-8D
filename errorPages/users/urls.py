@@ -8,7 +8,7 @@ router = SimpleRouter()
 router.register(r'api',UserViewSet)
 
 #ProductoViewset:
-#ip:8000/productos/api/ <---- GET, POST de todo
+#ip:8000/productos/api/ <---- GET
 #ip:8000/productos/api/{id} <----- GET, PUT, DELETE de uno
 
 urlpatterns = [
