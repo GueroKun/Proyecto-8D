@@ -1,35 +1,68 @@
-from django.shortcuts import render, redirect
-from django.contrib.auth import login, authenticate, logout
-from .forms import CustomUserCreationForm, CustomUserLoginForm
-from django.contrib.auth.decorators import login_required
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
+#Falta importar el modelo
+from .models import CustomUser
+#Falta importar el serializador
+from .serializers import CustomUserSerializer
+from rest_framework.renderers import JSONRenderer
 
-def register_view(request):
-    if request.method == 'POST':
-        form = CustomUserCreationForm(request.POST)
-        if form.is_valid():
-            user = form.save()
-            login(request, user) # Iniciar sesión después del registro
-            return redirect('home') # Redirigir a la página principal
-    else:
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = CustomUser.objects.all()
+    serializer_class = CustomUserSerializer
+    renderer_classes = [JSONRenderer]
+
+    #Como le pongo seguridad?
+    authentication_classes = [JWTAuthentication]
+    permission_classes=[IsAuthenticated]
+
+    #Sobreescribir el metodo para la obtención de permisos
+    def get_permissions(self):
+        if self.request.method in ['POST','PUT', 'DELETE']:
+            # Checar si tenemos sesión 
+            return [IsAuthenticated()]
+        #Dar acceso a todo lo demas sin estar logueado
+        return []
+
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import CustomTokenObtainPairSerializer
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
+from django.contrib.auth.models import User
+from .forms import CustomUserCreationForm
+from django.contrib.auth import get_user_model
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+class CustomUserFormAPI(APIView):
+    def get(self, request, *args, **kwargs):
         form = CustomUserCreationForm()
-    return render(request, 'register.html', {'form': form})
-
-def login_view(request):
-    if request.method == 'POST':
-        form = CustomUserLoginForm(data=request.POST)
+        fields = {
+            field: {
+            'label': form[field].label,
+            'input':form[field].field.widget.attrs,
+            'type': form[field].field.widget.input_type,
+            }
+                for field in form.fields
+        }
+        return Response(fields)
+    
+    def post(self, request, *args, **kwargs):
+        form = CustomUserCreationForm(request.data)
         if form.is_valid():
-            user = form.get_user()
-            login(request, user)
-            return redirect('home')
-    else:
-        form = CustomUserLoginForm()
-    return render(request, 'login.html', {'form': form})
-
-def logout_view(request):
-    logout(request)
-    message = message("info", "Se a cerrado session exitosamente", 200, " https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR8MIbugIhZBykSmQcR0QPcfnPUBOZQ6bm35w&s")
-    return render(request, "login.html", {"message":json.dumps(message.to_dict())})
-
-@login_required
-def home_view(request):
-    return render(request, 'home.html')
+            user_data = form.cleaned_data
+            User = get_user_model()
+            user = User.objects.create_user(
+            email=user_data['email'],
+            password=user_data['password1'],
+            name=user_data['name'],
+            surname=user_data['surname'],
+            control_number=user_data['control_number'],
+            age=user_data['age'],
+            tel=user_data['tel'],
+            )
+            return Response({'message': 'Usuario creado con éxito'},status=status.HTTP_201_CREATED)
+        return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
